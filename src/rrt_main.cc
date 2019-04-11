@@ -40,9 +40,6 @@
 
 #include "rrt.h"
 
-DEFINE_string(map, "", "Name of vector map file");
-DEFINE_string(input, "", "Name of ROS bag file to load");
-DEFINE_bool(fast, false, "Replay as fast as possible");
 DECLARE_string(helpon);
 DECLARE_int32(v);
 
@@ -214,7 +211,7 @@ void PublishVisualization(const ObstacleMap& map,
     DrawMove(p, m, &path_msg_);
     p = ApplyMove(p, m);
   }
-  
+
   for (const pair<CarPose, CarMove>& e : tree_edges) {
     DrawMove(e.first, e.second, &tree_msg_);
   }
@@ -267,14 +264,16 @@ void LoadMap(const string& file) {
 
 int main(int argc, char** argv) {
   google::ParseCommandLineFlags(&argc, &argv, false);
-  if (FLAGS_map == "") {
-    fprintf(stderr, "ERROR: Must specify map!\n");
+  if (argc != 8) {
+    fprintf(stderr,
+            "USAGE: ./bin/rrt start_x start_y start_r "
+            "goal_x goal_y goal_r mapfile\n");
     return 1;
   }
   // Initialize ROS.
   ros::init(argc, argv, "rrt");
   ros::NodeHandle n;
-  LoadMap(FLAGS_map);
+  LoadMap(argv[7]);
   InitializeMsgs();
   map_publisher_ = n.advertise<visualization_msgs::Marker>("map", 1);
   tree_publisher_ = n.advertise<visualization_msgs::Marker>("tree", 1);
@@ -282,7 +281,15 @@ int main(int argc, char** argv) {
   using COMPSCI603::CarMove;
   using COMPSCI603::CarPose;
   vector<CarMove> path;
-  CarPose start, goal;
+  const CarPose start(Vector2f(atof(argv[1]), atof(argv[2])), atof(argv[3]));
+  const CarPose goal(Vector2f(atof(argv[4]), atof(argv[5])), atof(argv[6]));
+  printf("Start: %f,%f %f Goal: %f,%f %f \n",
+         start.loc.x(),
+         start.loc.y(),
+         start.angle,
+         goal.loc.x(),
+         goal.loc.y(),
+         goal.angle);
   COMPSCI603::RRTPlan(map_, start, goal, &path);
   return 0;
 }
