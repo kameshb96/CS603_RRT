@@ -79,15 +79,17 @@ bool Line::Intersection(const Vector2f& p2,
 CarPose ApplyMove(const CarPose& p, const CarMove& m) {
   CarPose p2 = p;
   const float dtheta = m.distance * m.curvature;
-  p2.angle += dtheta;
 
   if (fabs(dtheta) > kEpsilon) {
+    p2.angle += dtheta;
     const float r = 1.0 / m.curvature;
     using Eigen::Rotation2Df;
     const Vector2f center = Rotation2Df(p.angle) * Vector2f(0, r) + p.loc;
     using Eigen::Translation2f;
     p2.loc = Translation2f(center) * Rotation2Df(dtheta) *
         Translation2f(-center) * p.loc;
+  } else {
+    p2.loc += Eigen::Rotation2Df(p.angle) * Vector2f(m.distance, 0);
   }
   return p2;
 }
