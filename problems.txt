@@ -1,0 +1,2 @@
+./bin/rrt 24 4.4 2.5 2.6 41.3 1.57 maps/merging.txt
+./bin/rrt 10 7 0 10 2 0 maps/parallel_parking.txt
