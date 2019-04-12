@@ -196,7 +196,7 @@ void DrawMove(const CarPose& p,
 void DrawCar(const CarPose& p,
              const Color4f& col,
              Marker* msg) {
-  const Eigen::Affine2f tf = 
+  const Eigen::Affine2f tf =
       Eigen::Translation2f(p.loc) * Eigen::Rotation2Df(p.angle);
   const int kNumLines = 6;
   static const Vector2f car[kNumLines][2] = {
@@ -207,13 +207,23 @@ void DrawCar(const CarPose& p,
     { Vector2f(0.0, 0.0), Vector2f(0.5, 0.0) },
     { Vector2f(0.0, 0.0), Vector2f(0.0, 0.5) }
   };
-  
+
   for (int i = 0; i < kNumLines; ++i) {
     AddLine(tf * car[i][0], tf * car[i][1], col, msg);
   }
 }
 
 namespace COMPSCI603 {
+
+// Publish a visualization of the current state of the algorithm
+// Start: The initial pose as passed in to RRTPlan, this will be drawn in Red
+// Goal: The goal pose as passed in to RRTPlan this will be drawn in Green
+// Current: The most recent node to be added to the tree, will be drawn in blue
+// Tree Edges: The edges that exist in the current tree. An edge here is
+//   defined as an initial pose and a movement to the next pose. The edges will
+//   be drawn via displaying the arc defined by the moves
+// Path: A path from start to another node, represented as a series of car
+//   moves. This will be drawn as a series of arks
 void PublishVisualization(const CarPose& start,
                           const CarPose& goal,
                           const CarPose& current,
@@ -264,6 +274,10 @@ void PublishVisualization(const CarPose& start,
 }
 }  // namespace COMPSCI603
 
+
+// Load vector map from file.
+// Expects the first line to be min_x min_y max_x max_y
+// Subsequent lines are coordinates separated by commas: x1, y1, x2, y2
 void LoadMap(const string& file) {
   FILE* fid = fopen(file.c_str(), "r");
   if (fid == NULL) {

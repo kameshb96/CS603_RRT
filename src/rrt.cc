@@ -45,10 +45,13 @@ using math_util::AngleDist;
 
 namespace COMPSCI603 {
 
+// Returns the cross product between 2d vectors
 float Cross(const Vector2f& v1, const Vector2f& v2) {
   return (v1.x() * v2.y() - v1.y() * v2.x());
 }
 
+// Returns true and populates the location at intercept if this line collides
+// with the line specified by p2 and p3
 bool Line::Intersection(const Vector2f& p2,
                         const Vector2f& p3,
                         Vector2f* intersection) const {
@@ -71,6 +74,8 @@ bool Line::Intersection(const Vector2f& p2,
   return true;
 }
 
+// Helper Function
+// Given an initial pose p and a move m, return the next pose
 CarPose ApplyMove(const CarPose& p, const CarMove& m) {
   CarPose p2 = p;
   const float dtheta = m.distance * m.curvature;
@@ -87,10 +92,16 @@ CarPose ApplyMove(const CarPose& p, const CarMove& m) {
   return p2;
 }
 
+// Build an RRT to plan a path to get from start to goal, avoiding the obstacles
+// in the map. Set path to the solution found, if one exists. If no solution
+// is found, return false, else return true.
 bool RRTPlan(const Map& map,
              const CarPose& start,
              const CarPose& goal,
              vector<CarMove>* path) {
+
+  // TODO: Fill in this function
+
   return false;
 }
 

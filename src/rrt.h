@@ -31,24 +31,30 @@ static const float kEpsilon = 1e-6;
 
 namespace COMPSCI603 {
 
-  
+
 struct Line {
   Eigen::Vector2f p0;
   Eigen::Vector2f p1;
   Line() {}
   Line(const Eigen::Vector2f& p0, const Eigen::Vector2f& p1) : p0(p0), p1(p1) {}
+
+  // Returns true and populates the location at intercept if this line collides
+  // with the line specified by p2 and p3
   bool Intersection(const Eigen::Vector2f& p2,
                     const Eigen::Vector2f& p3,
                     Eigen::Vector2f* intersection) const;
 };
 
 struct Map {
+  // A set of lines representing the obstacles in the map
   std::vector<Line> lines;
+
+  // The minimum and maximum X and Y values of the map
   float min_x;
   float min_y;
   float max_x;
   float max_y;
-}; 
+};
 
 // The pose of the car, as defined in the handout.
 struct CarPose {
@@ -61,6 +67,7 @@ struct CarPose {
 
 // A move of the car, defined by its curvature (1 / radius) and the distance
 // traversed along it. Positive curvature => ccw rotation, negative => cw.
+// Note: The car can travel straight (curvature = 0, radius = inf)
 struct CarMove {
   float distance;
   float curvature;
@@ -68,8 +75,19 @@ struct CarMove {
   CarMove(float d, float c) : distance(d), curvature(c) {}
 };
 
+// Helper Function
+// Given an initial pose p and a move m, return the next pose
 CarPose ApplyMove(const CarPose& p, const CarMove& m);
 
+// Publish a visualization of the current state of the algorithm
+// Start: The initial pose as passed in to RRTPlan, this will be drawn in Red
+// Goal: The goal pose as passed in to RRTPlan this will be drawn in Green
+// Current: The most recent node to be added to the tree, will be drawn in blue
+// Tree Edges: The edges that exist in the current tree. An edge here is
+//   defined as an initial pose and a movement to the next pose. The edges will
+//   be drawn via displaying the arc defined by the moves
+// Path: A path from start to another node, represented as a series of car
+//   moves. This will be drawn as a series of arks
 void PublishVisualization(
     const CarPose& start,
     const CarPose& goal,
