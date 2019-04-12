@@ -31,19 +31,24 @@ static const float kEpsilon = 1e-6;
 
 namespace COMPSCI603 {
 
-struct Obstacle {
+  
+struct Line {
   Eigen::Vector2f p0;
   Eigen::Vector2f p1;
-  Eigen::Vector2f p2;
-  Eigen::Vector2f p3;
-  Obstacle() {}
-  Obstacle(const Eigen::Vector2f& p0,
-           const Eigen::Vector2f& p1,
-           const Eigen::Vector2f& p2,
-           const Eigen::Vector2f& p3) : p0(p0), p1(p1), p2(p2), p3(p3) {}
-  Obstacle(const Eigen::Vector2f points[4]) :
-      p0(points[0]), p1(points[1]), p2(points[2]), p3(points[3]) {}
+  Line() {}
+  Line(const Eigen::Vector2f& p0, const Eigen::Vector2f& p1) : p0(p0), p1(p1) {}
+  bool Intersection(const Eigen::Vector2f& p2,
+                    const Eigen::Vector2f& p3,
+                    Eigen::Vector2f* intersection) const;
 };
+
+struct Map {
+  std::vector<Line> lines;
+  float min_x;
+  float min_y;
+  float max_x;
+  float max_y;
+}; 
 
 // The pose of the car, as defined in the handout.
 struct CarPose {
@@ -63,20 +68,19 @@ struct CarMove {
   CarMove(float d, float c) : distance(d), curvature(c) {}
 };
 
-typedef std::vector<Obstacle> ObstacleMap;
-
+CarPose ApplyMove(const CarPose& p, const CarMove& m);
 
 void PublishVisualization(
-    const ObstacleMap& map,
     const CarPose& start,
     const CarPose& goal,
+    const CarPose& current,
     const std::vector<std::pair<CarPose, CarMove>>& tree_edges,
     const std::vector<CarMove>& path);
 
 // Build an RRT to plan a path to get from start to goal, avoiding the obstacles
 // in the map. Set path to the solution found, if one exists. If no solution
 // is found, return false, else return true.
-bool RRTPlan(const ObstacleMap& map,
+bool RRTPlan(const Map& map,
              const CarPose& start,
              const CarPose& goal,
              std::vector<CarMove>* path);

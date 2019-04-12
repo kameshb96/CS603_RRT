@@ -97,7 +97,6 @@ template <class Vector2>
 void AddPoint(const Vector2& v,
               const Color4f& color,
               visualization_msgs::Marker* msg) {
-  CHECK_EQ(msg->type, visualization_msgs::Marker::POINTS);
   msg->points.push_back(StdPoint(v));
   msg->colors.push_back(StdColor(color));
 }

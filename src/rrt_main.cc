@@ -19,6 +19,7 @@
 */
 //========================================================================
 
+#include <signal.h>
 #include <stdlib.h>
 #include <math.h>
 #include <stdio.h>
@@ -50,20 +51,23 @@ using std::make_pair;
 using std::pair;
 using gui_helpers::ClearMarker;
 using gui_helpers::AddLine;
+using gui_helpers::AddPoint;
 using gui_helpers::Color4f;
 using COMPSCI603::CarMove;
 using COMPSCI603::CarPose;
-using COMPSCI603::Obstacle;
-using COMPSCI603::ObstacleMap;
+using COMPSCI603::Map;
+using COMPSCI603::ApplyMove;
 using visualization_msgs::Marker;
 
-ObstacleMap map_;
+Map map_;
 ros::Publisher map_publisher_;
 ros::Publisher tree_publisher_;
 ros::Publisher path_publisher_;
+ros::Publisher points_publisher_;
 visualization_msgs::Marker map_msg_;
 visualization_msgs::Marker tree_msg_;
 visualization_msgs::Marker path_msg_;
+visualization_msgs::Marker points_msg_;
 
 geometry_msgs::Point EigenToRosPoint(const Vector2f& p) {
   geometry_msgs::Point p2;
@@ -119,7 +123,7 @@ void InitializeMsgs() {
   tree_msg_.id = 0;
 
   path_msg_.header = header;
-  path_msg_.type = visualization_msgs::Marker::LINE_STRIP;
+  path_msg_.type = visualization_msgs::Marker::LINE_LIST;
   path_msg_.action = visualization_msgs::Marker::ADD;
   path_msg_.color.a = 0.2;
   path_msg_.color.r = 67.0 / 255.0;
@@ -137,26 +141,36 @@ void InitializeMsgs() {
   path_msg_.scale.z = 1;
   path_msg_.ns = "path";
   path_msg_.id = 0;
+
+  points_msg_.header = header;
+  points_msg_.type = visualization_msgs::Marker::LINE_LIST;
+  points_msg_.action = visualization_msgs::Marker::ADD;
+  points_msg_.color.a = 0.2;
+  points_msg_.color.r = 67.0 / 255.0;
+  points_msg_.color.g = 178.0 / 255.0;
+  points_msg_.color.b = 89.0 / 255.0;
+  points_msg_.pose.position.x = 0;
+  points_msg_.pose.position.y = 0;
+  points_msg_.pose.position.z = 0;
+  points_msg_.pose.orientation.x = 0.0;
+  points_msg_.pose.orientation.y = 0.0;
+  points_msg_.pose.orientation.z = 0.0;
+  points_msg_.pose.orientation.w = 1.0;
+  points_msg_.scale.x = 0.1;
+  points_msg_.scale.y = 1;
+  points_msg_.scale.z = 1;
+  points_msg_.ns = "points";
+  points_msg_.id = 0;
+
 }
 
-CarPose ApplyMove(const CarPose& p, const CarMove& m) {
-  CarPose p2 = p;
-  const float dtheta = m.distance * m.curvature;
-  p2.angle += dtheta;
 
-  if (fabs(dtheta) > kEpsilon) {
-    const float r = 1.0 / m.curvature;
-    using Eigen::Rotation2Df;
-    const Vector2f center = Rotation2Df(p.angle) * Vector2f(0, r) + p.loc;
-    using Eigen::Translation2f;
-    p2.loc = Translation2f(center) * Rotation2Df(dtheta) *
-        Translation2f(-center) * p.loc;
-  }
-  return p2;
-}
 
-void DrawMove(const CarPose& p, const CarMove& m, Marker* msg) {
-  const float kDistIncr = 0.01;
+void DrawMove(const CarPose& p,
+              const CarMove& m,
+              const Color4f& color,
+              Marker* msg) {
+  const float kDistIncr = 0.3;
   const float dtheta = m.distance * m.curvature;
 
   const CarPose p1 = ApplyMove(p, m);
@@ -168,53 +182,85 @@ void DrawMove(const CarPose& p, const CarMove& m, Marker* msg) {
     // Draw n equal length segments along the arc.
     for (int i = 0; i < n; ++i) {
       const CarPose p1 = ApplyMove(p0, incr_move);
-      AddLine(p0.loc, p1.loc, Color4f(0.3, 0.3, 0.3, 0.5), msg);
+      AddLine(p0.loc, p1.loc, color, msg);
       p0 = p1;
     }
     // Final segment to finish the arc.
-    AddLine(p0.loc, p1.loc, Color4f(0.3, 0.3, 0.3, 0.5), msg);
+    AddLine(p0.loc, p1.loc, color, msg);
   } else {
     // Straight line.
-    AddLine(p.loc, p1.loc, Color4f(0.3, 0.3, 0.3, 0.5), msg);
+    AddLine(p.loc, p1.loc, color, msg);
+  }
+}
+
+void DrawCar(const CarPose& p,
+             const Color4f& col,
+             Marker* msg) {
+  const Eigen::Affine2f tf = 
+      Eigen::Translation2f(p.loc) * Eigen::Rotation2Df(p.angle);
+  const int kNumLines = 6;
+  static const Vector2f car[kNumLines][2] = {
+    { Vector2f(-0.5, -0.85), Vector2f(-0.5, 0.85) },
+    { Vector2f(-0.5, 0.85), Vector2f(4.0, 0.85) },
+    { Vector2f(4.0, -0.85), Vector2f(4.0, 0.85) },
+    { Vector2f(4.0, -0.85), Vector2f(-0.5, -0.85) },
+    { Vector2f(0.0, 0.0), Vector2f(0.5, 0.0) },
+    { Vector2f(0.0, 0.0), Vector2f(0.0, 0.5) }
+  };
+  
+  for (int i = 0; i < kNumLines; ++i) {
+    AddLine(tf * car[i][0], tf * car[i][1], col, msg);
   }
 }
 
 namespace COMPSCI603 {
-void PublishVisualization(const ObstacleMap& map,
-                          const CarPose& start,
+void PublishVisualization(const CarPose& start,
                           const CarPose& goal,
+                          const CarPose& current,
                           const vector<pair<CarPose, CarMove>>& tree_edges,
                           const vector<CarMove>& path) {
+  static const Color4f kTreeColor(0.3, 0.3, 0.3, 0.5);
+  static const Color4f kPathColor(0.3, 0.3, 1.0, 1.0);
+  static const Color4f kMapColor(0.4, 0.4, 1.0, 1.0);/*
   static double t_last = 0;
-  if (GetMonotonicTime() - t_last < 0.016) {
+  if (GetMonotonicTime() - t_last < 0.005) {
     // Rate-limit visualization.
     return;
   }
-  t_last = GetMonotonicTime();
+  t_last = GetMonotonicTime();*/
 
-  ClearMarker(&map_msg_);
   ClearMarker(&tree_msg_);
   ClearMarker(&path_msg_);
-  for (const Obstacle& o : map) {
-    const Vector2f& p0(o.p0);
-    const Vector2f& p1(o.p1);
-    const Vector2f& p2(o.p2);
-    const Vector2f& p3(o.p3);
-    AddLine(p0, p1, Color4f(0.4, 0.4, 1.0, 1), &map_msg_);
-    AddLine(p1, p2, Color4f(0.4, 0.4, 1.0, 1), &map_msg_);
-    AddLine(p2, p3, Color4f(0.4, 0.4, 1.0, 1), &map_msg_);
-    AddLine(p3, p0, Color4f(0.4, 0.4, 1.0, 1), &map_msg_);
-  }
+  ClearMarker(&points_msg_);
+
+  DrawCar(start, Color4f::kRed, &points_msg_);
+  DrawCar(goal, Color4f::kGreen, &points_msg_);
+  DrawCar(current, Color4f::kBlue, &points_msg_);
 
   CarPose p = start;
   for (const CarMove& m : path) {
-    DrawMove(p, m, &path_msg_);
+    DrawMove(p, m, kPathColor, &path_msg_);
     p = ApplyMove(p, m);
   }
 
   for (const pair<CarPose, CarMove>& e : tree_edges) {
-    DrawMove(e.first, e.second, &tree_msg_);
+    DrawMove(e.first, e.second, kTreeColor, &tree_msg_);
   }
+
+  map_msg_.header.stamp = ros::Time::now();
+  map_msg_.header.seq++;
+  tree_msg_.header.stamp = ros::Time::now();
+  tree_msg_.header.seq++;
+  path_msg_.header.stamp = ros::Time::now();
+  path_msg_.header.seq++;
+  points_msg_.header.stamp = ros::Time::now();
+  points_msg_.header.seq++;
+  map_publisher_.publish(map_msg_);
+  tree_publisher_.publish(tree_msg_);
+  path_publisher_.publish(path_msg_);
+  points_publisher_.publish(points_msg_);
+  ros::spinOnce();
+  Sleep(0.01);
 }
 }  // namespace COMPSCI603
 
@@ -224,46 +270,41 @@ void LoadMap(const string& file) {
     fprintf(stderr, "ERROR: Unable to load map %s\n", file.c_str());
     exit(1);
   }
-
-  bool load_complete = false;
-  while (!load_complete) {
-    int i = 0;
-    Vector2f points[4];
-    for (; i < 4; ++i) {
-      if (fscanf(fid, "%f,%f", &(points[i].x()), &(points[i].y())) != 2) {
-        break;
-      }
-    }
-    if (i == 0) {
-      // No more lines to read.
-      load_complete = true;
-    } else if (i == 4) {
-      // Succesfully loaded one more obstacle.
-      map_.push_back(Obstacle(points));
-      if (FLAGS_v > 2) {
-        printf("Obstacle: %f,%f %f,%f %f,%f %f,%f\n",
-               map_.back().p0.x(),
-               map_.back().p0.y(),
-               map_.back().p1.x(),
-               map_.back().p1.y(),
-               map_.back().p2.x(),
-               map_.back().p2.y(),
-               map_.back().p3.x(),
-               map_.back().p3.y());
-      }
-    } else {
-      // Something's wrong: interrupted mid-line.
-      fclose(fid);
-      fprintf(stderr, "ERROR: malformed map file %s\n", file.c_str());
-      exit(2);
-    }
+  if (fscanf(fid, "%f %f %f %f",
+            &(map_.min_x),
+            &(map_.min_y),
+            &(map_.max_x),
+            &(map_.max_y)) != 4) {
+    fprintf(stderr, "ERROR: Map parse error\n");
+    exit(1);
+  }
+  if (FLAGS_v > 2) {
+    printf("Map min: %f %f max: %f %f\n",
+           map_.min_x,
+           map_.min_y,
+           map_.max_x,
+           map_.max_y);
+  }
+  float x1(0), y1(0), x2(0), y2(0);
+  while (fscanf(fid, "%f,%f,%f,%f", &x1, &y1, &x2, &y2) == 4) {
+    map_.lines.push_back(COMPSCI603::Line(Vector2f(x1, y1), Vector2f(x2, y2)));
   }
   fclose(fid);
 
+  for (const COMPSCI603::Line& l : map_.lines) {
+    map_msg_.points.push_back(EigenToRosPoint(l.p0));
+    map_msg_.points.push_back(EigenToRosPoint(l.p1));
+  }
+}
+
+void SignalHandler(int signum) {
+  printf("Exiting with signal %d\n", signum);
+  exit(0);
 }
 
 int main(int argc, char** argv) {
-  google::ParseCommandLineFlags(&argc, &argv, false);
+  signal(SIGINT, SignalHandler);
+  google::ParseCommandLineFlags(&argc, &argv, true);
   if (argc != 8) {
     fprintf(stderr,
             "USAGE: ./bin/rrt start_x start_y start_r "
@@ -271,13 +312,14 @@ int main(int argc, char** argv) {
     return 1;
   }
   // Initialize ROS.
-  ros::init(argc, argv, "rrt");
+  ros::init(argc, argv, "rrt", ros::init_options::NoSigintHandler);
   ros::NodeHandle n;
   LoadMap(argv[7]);
   InitializeMsgs();
   map_publisher_ = n.advertise<visualization_msgs::Marker>("map", 1);
   tree_publisher_ = n.advertise<visualization_msgs::Marker>("tree", 1);
   path_publisher_ = n.advertise<visualization_msgs::Marker>("path", 1);
+  points_publisher_ = n.advertise<visualization_msgs::Marker>("points", 1);
   using COMPSCI603::CarMove;
   using COMPSCI603::CarPose;
   vector<CarMove> path;
