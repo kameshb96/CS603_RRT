@@ -164,8 +164,6 @@ void InitializeMsgs() {
 
 }
 
-
-
 void DrawMove(const CarPose& p,
               const CarMove& m,
               const Color4f& color,
@@ -174,10 +172,11 @@ void DrawMove(const CarPose& p,
   const float dtheta = m.distance * m.curvature;
 
   const CarPose p1 = ApplyMove(p, m);
-  if (fabs(dtheta) > kEpsilon) {
+  if (fabs(dtheta) > kEpsilon && fabs(m.distance) > kEpsilon) {
     // Draw an arc.
-    const CarMove incr_move(kDistIncr, m.curvature);
-    const int n = floor(m.distance / kDistIncr);
+    const float dir = (m.distance > 0.0) ? 1.0 : -1.0;
+    const CarMove incr_move(kDistIncr * dir, m.curvature);
+    const int n = floor(fabs(m.distance) / kDistIncr);
     CarPose p0 = p;
     // Draw n equal length segments along the arc.
     for (int i = 0; i < n; ++i) {
@@ -191,7 +190,7 @@ void DrawMove(const CarPose& p,
     // Straight line.
     AddLine(p.loc, p1.loc, color, msg);
   }
-}
+              }
 
 void DrawCar(const CarPose& p,
              const Color4f& col,
